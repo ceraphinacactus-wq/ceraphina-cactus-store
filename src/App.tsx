@@ -59,6 +59,7 @@ function Shop() {
     <Layout>
       <h2 style={{ marginTop: 0 }}>Shop</h2>
       <p className="helper">Next: Square catalog fetch + product cards.</p>
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/api/catalog`)
     </Layout>
   );
 }
