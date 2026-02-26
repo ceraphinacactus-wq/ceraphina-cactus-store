@@ -1,5 +1,7 @@
 import { Routes, Route, Link, NavLink } from "react-router-dom";
 import { useCartStore } from "./features/cart/cart.store";
+import ShopPage from "./features/shop/ShopPage";
+import CareGuidePage from "./features/care/CareGuidePage";
 
 function Badge() {
   const items = useCartStore((s) => s.items);
@@ -166,10 +168,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/shop" element={<Shop />} />
+      <Route path="/shop" element={<ShopPage />} />
       <Route path="/product/:id" element={<Product />} />
       <Route path="/cart" element={<Cart />} />
-      <Route path="/care-guide" element={<CareGuide />} />
+      <Route path="/care-guide" element={<CareGuidePage />} />
       <Route path="/newsletter" element={<Newsletter />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="*" element={<Layout><div className="card" style={{ padding: 16 }}><strong>Not found</strong></div></Layout>} />
