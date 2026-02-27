@@ -22,3 +22,4 @@ export type SquareCatalogResponse = {
   objects?: any[];
   latest_time?: string;
 };
+
