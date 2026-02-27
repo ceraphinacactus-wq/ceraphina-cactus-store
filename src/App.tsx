@@ -5,7 +5,7 @@ import Layout from "./layout/Layout";
 import HomePage from "./features/home/HomePage";
 import ShopPage from "./features/shop/ShopPage";
 import CareGuidePage from "./features/Care/CareGuidePage";
-import NewsletterPage from "./features/newsletter/NewsletterPage";
+import NewsletterPage from "./features/newsletter/NewsletterPage.tsx";
 import ContactPage from "./features/contact/ContactPage";
 import CartPage from "./features/cart/CartPage";
 
