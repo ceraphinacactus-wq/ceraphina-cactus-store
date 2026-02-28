@@ -1,3 +1,4 @@
+// src/features/shop/shop.types.ts
 export type Money = { amount: number; currency: string };
 
 export type ShopVariant = {
@@ -16,7 +17,13 @@ export type ShopProduct = {
   imageUrl?: string;
   variants: ShopVariant[];
   defaultVariant?: ShopVariant;
+  images?: {
+    url: string;
+    alt?: string;
 };
+
+// Back-compat alias (your ShopPage was importing UiProduct)
+export type UiProduct = ShopProduct;
 
 export type SquareCatalogResponse = {
   objects?: any[];

@@ -1,85 +1,135 @@
-// worker/src/index.ts
-
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
-};
-
-type Env = {
-  SQUARE_ACCESS_TOKEN: string;
-};
-
-// Change to production when going live:
-// const SQUARE_BASE = "https://connect.squareup.com";
-const SQUARE_BASE = "https://connect.squareupsandbox.com";
-
-function json(data: unknown, init?: ResponseInit) {
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...CORS_HEADERS,
-      ...(init?.headers || {}),
-    },
-  });
-}
-
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: any): Promise<Response> {
     const url = new URL(request.url);
 
-    // CORS preflight
+    // Simple CORS (lock down later)
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: CORS_HEADERS });
+      return new Response(null, { headers: corsHeaders });
     }
 
-    // Health check
+    const squareBase = env.SQUARE_ENV === "production"
+      ? "https://connect.squareup.com"
+      : "https://connect.squareupsandbox.com";
+
+    const squareHeaders = {
+      Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      "Square-Version": env.SQUARE_VERSION ?? "2024-01-17",
+      "Content-Type": "application/json",
+    };
+
+    // Health
     if (url.pathname === "/api/health") {
-      return json({ ok: true });
+      return json({ ok: true, ts: new Date().toISOString() }, corsHeaders);
     }
 
-    // Prove token works + shows which sandbox account/location
-    if (url.pathname === "/api/locations" && request.method === "GET") {
-      const res = await fetch(`${SQUARE_BASE}/v2/locations`, {
-        headers: {
-          Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
-          "Square-Version": "2024-01-17",
+    // Catalog (items)
+    if (url.pathname === "/api/catalog") {
+      const squareRes = await fetch(`${squareBase}/v2/catalog/list?types=ITEM`, {
+        headers: squareHeaders,
+      });
+
+      const bodyText = await squareRes.text();
+      return new Response(bodyText, {
+        status: squareRes.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Checkout
+    // Frontend POSTs: { lineItems: [{ name, quantity, catalogObjectId?, variationId?, basePriceMoney? }], successUrl, cancelUrl }
+    if (url.pathname === "/api/checkout" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+
+      if (!payload?.lineItems?.length) {
+        return json({ error: "Missing lineItems" }, corsHeaders, 400);
+      }
+
+      // Location: easiest is store it as env var
+      const locationId = env.SQUARE_LOCATION_ID;
+      if (!locationId) {
+        return json({ error: "Missing SQUARE_LOCATION_ID env var" }, corsHeaders, 500);
+      }
+
+      const successUrl = payload.successUrl || env.SUCCESS_URL;
+      const cancelUrl = payload.cancelUrl || env.CANCEL_URL;
+
+      if (!successUrl || !cancelUrl) {
+        return json({ error: "Missing successUrl/cancelUrl (or SUCCESS_URL/CANCEL_URL env vars)" }, corsHeaders, 400);
+      }
+
+      // Build Square checkout payload
+      // Prefer variationId (catalogObjectId) when you have it
+      const lineItems = payload.lineItems.map((li: any) => {
+        const item: any = {
+          quantity: String(li.quantity ?? 1),
+        };
+
+        // If you pass variationId, use it (Square calls it catalog_object_id)
+        if (li.variationId) {
+          item.catalog_object_id = li.variationId;
+        } else if (li.catalogObjectId) {
+          item.catalog_object_id = li.catalogObjectId;
+        } else {
+          // Fallback: ad-hoc item
+          item.name = li.name ?? "Item";
+          if (li.basePriceMoney?.amount != null) {
+            item.base_price_money = {
+              amount: Number(li.basePriceMoney.amount),
+              currency: li.basePriceMoney.currency ?? "USD",
+            };
+          }
+        }
+
+        return item;
+      });
+
+      const body = {
+        idempotency_key: crypto.randomUUID(),
+        order: {
+          location_id: locationId,
+          line_items: lineItems,
         },
-      });
+        checkout_options: {
+          redirect_url: successUrl,
+          ask_for_shipping_address: true,
+        },
+        pre_populated_data: {},
+      };
 
-      const body = await res.text();
-      return new Response(body, {
-        status: res.status,
-        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-      });
-    }
-
-    // Catalog: use SEARCH (more reliable than list in sandbox)
-    // Returns ITEM objects + related_objects (variations, images, categories)
-    if (url.pathname === "/api/catalog" && request.method === "GET") {
-      const res = await fetch(`${SQUARE_BASE}/v2/catalog/search`, {
+      const squareRes = await fetch(`${squareBase}/v2/online-checkout/payment-links`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
-          "Square-Version": "2024-01-17",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          object_types: ["ITEM"],
-          include_related_objects: true,
-          // optional: limit: 100
-        }),
+        headers: squareHeaders,
+        body: JSON.stringify(body),
       });
 
-      const body = await res.text();
-      return new Response(body, {
-        status: res.status,
-        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-      });
+      const squareJson = await squareRes.json().catch(() => ({}));
+
+      if (!squareRes.ok) {
+        return json(
+          { error: "Square checkout creation failed", details: squareJson },
+          corsHeaders,
+          squareRes.status
+        );
+      }
+
+      // The url you redirect the shopper to:
+      const checkoutUrl = squareJson?.payment_link?.url;
+      return json({ checkoutUrl, raw: squareJson }, corsHeaders);
     }
 
-    // Default
-    return json({ error: "Not Found" }, { status: 404 });
+    return new Response("Not Found", { status: 404, headers: corsHeaders });
   },
 };
+
+function json(data: any, extraHeaders: Record<string, string>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...extraHeaders, "Content-Type": "application/json" },
+  });
+}

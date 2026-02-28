@@ -8,6 +8,8 @@ import CareGuidePage from "./features/Care/CareGuidePage";
 import NewsletterPage from "./features/newsletter/NewsletterPage.tsx";
 import ContactPage from "./features/contact/ContactPage";
 import CartPage from "./features/cart/CartPage";
+import CheckoutSuccessPage from "./features/checkout/CheckoutSuccessPage";
+
 
 export default function App() {
   return (
@@ -20,6 +22,7 @@ export default function App() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/cart" element={<CartPage />} />
         <Route path="*" element={<div>Not found</div>} />
+        <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
       </Route>
     </Routes>
   );

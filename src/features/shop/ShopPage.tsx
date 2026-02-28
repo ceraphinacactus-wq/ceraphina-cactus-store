@@ -121,11 +121,17 @@ export default function ShopPage() {
                       onClick={() => {
                         if (!v) return;
                         addItem({
-                          id: v.id,
-                          name: p.name,
-                          price: v.price?.amount ?? 0,
-                          quantity: 1,
-                        });
+                            productId: p.id,
+                            variantId: v.id,
+                            name: p.name,
+                            variantName: v.name,
+                            unitPrice: {
+                              amount: v.price?.amount ?? 0,
+                              currency: v.price?.currency ?? "USD",
+                            },
+                            imageUrl: p.images?.[0]?.url,
+                            quantity: 1,
+});
                       }}
                     >
                       Add
